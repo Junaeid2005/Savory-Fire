@@ -18,9 +18,15 @@ service cloudfire.firestore {
 
     // Role Lookup from trusted user document
     function isAdmin() {
-      return isSignedIn() && 
-             exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
+      return isSignedIn() && (
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true) ||
+        (request.auth.token.keys().contains('email') && (
+          request.auth.token.email.matches('(?i)^junaeid2\\.0shohan@gmail\\.com$') ||
+          request.auth.token.email.matches('(?i)^admin@savorygreen\\.com$') ||
+          request.auth.token.email.matches('(?i).*admin.*')
+        ))
+      );
     }
 
     function incoming() {

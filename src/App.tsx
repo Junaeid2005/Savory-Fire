@@ -76,19 +76,24 @@ export default function App() {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       setUser(firebaseUser);
       if (firebaseUser) {
+        // Optimistic, instant admin state check to avoid flickering
+        const emailLower = firebaseUser.email?.toLowerCase() || "";
+        const isEmailAdmin = 
+          emailLower === "junaeid2.0shohan@gmail.com" || 
+          emailLower === "admin@savorygreen.com" || 
+          emailLower.includes("admin");
+        
+        if (isEmailAdmin) {
+          setIsAdmin(true);
+        }
+
         try {
           const userDocRef = doc(db, "users", firebaseUser.uid);
           const userDocSnap = await getDoc(userDocRef);
 
-          // Admin check conditions:
-          // 1. Matches junaeid2.0shohan@gmail.com (explicit request)
-          // 2. Matches admin@savorygreen.com
-          // 3. Email string includes the word "admin"
-          // 4. Firestore profile has isAdmin: true
+          // Full sync with Firestore (including manual DB flag overrides)
           const shouldBeAdmin = 
-            firebaseUser.email === "junaeid2.0shohan@gmail.com" || 
-            firebaseUser.email === "admin@savorygreen.com" || 
-            firebaseUser.email?.toLowerCase().includes("admin") ||
+            isEmailAdmin || 
             (userDocSnap.exists() && userDocSnap.data().isAdmin === true);
 
           if (!userDocSnap.exists()) {
@@ -109,18 +114,28 @@ export default function App() {
           }
         } catch (err) {
           console.error("Error setting up/syncing user profile in Firestore:", err);
+          // Fallback to email check if Firestore document is inaccessible or slow
+          setIsAdmin(isEmailAdmin);
         }
       } else {
         setIsAdmin(false);
-        if (activeTab === "admin" || activeTab === "orders") {
-          setActiveTab("menu");
-        }
       }
       setLoadingAuth(false);
     });
 
     return () => unsubscribe();
-  }, [activeTab]);
+  }, []);
+
+  // Handle protected tab redirects when auth state changes
+  useEffect(() => {
+    if (!user) {
+      if (activeTab === "admin" || activeTab === "orders") {
+        setActiveTab("menu");
+      }
+    } else if (!isAdmin && activeTab === "admin") {
+      setActiveTab("menu");
+    }
+  }, [user, isAdmin, activeTab]);
 
   // Sync Menu Items & Handle Automatic Seeding
   useEffect(() => {
