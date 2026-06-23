@@ -1,0 +1,8 @@
+{
+  "name": "Savory Green",
+  "description": "A full-stack modern restaurant website with Firebase Auth, Firestore, live ordering, reference payments, and an admin management dashboard.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

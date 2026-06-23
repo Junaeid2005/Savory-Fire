@@ -1,0 +1,114 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile database document.",
+      "type": "object",
+      "properties": {
+        "email": {
+          "type": "string",
+          "description": "Registered email of the user"
+        },
+        "isAdmin": {
+          "type": "boolean",
+          "description": "Whether user is an admin"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Account registration timestamp"
+        }
+      },
+      "required": ["email", "isAdmin", "createdAt"]
+    },
+    "FoodItem": {
+      "title": "FoodItem",
+      "description": "Food item record in the menu.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Food name"
+        },
+        "price": {
+          "type": "number",
+          "description": "Unit price of the item"
+        },
+        "imageUrl": {
+          "type": "string",
+          "description": "Food image URL reference"
+        },
+        "description": {
+          "type": "string",
+          "description": "Detailed description"
+        },
+        "category": {
+          "type": "string",
+          "description": "Food category e.g., Burger, Pizza, Drink"
+        },
+        "isAvailable": {
+          "type": "boolean",
+          "description": "Available for ordering"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp when added"
+        }
+      },
+      "required": ["name", "price", "imageUrl", "description", "category", "isAvailable"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "A food order transaction document.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "User UID who made the order"
+        },
+        "userEmail": {
+          "type": "string",
+          "description": "User email address"
+        },
+        "items": {
+          "type": "array",
+          "description": "Array of item quantities and details"
+        },
+        "totalPrice": {
+          "type": "number",
+          "description": "Summed price of all items ordered"
+        },
+        "referenceNumber": {
+          "type": "string",
+          "description": "Random 4-digit unique reference code"
+        },
+        "paymentStatus": {
+          "type": "string",
+          "enum": ["pending", "paid"],
+          "description": "Payment checkout status"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Order creation timestamp"
+        }
+      },
+      "required": ["userId", "userEmail", "items", "totalPrice", "referenceNumber", "paymentStatus", "createdAt"]
+    }
+  },
+  "firestore": {
+    "users/{userId}": {
+      "schema": "User",
+      "description": "Collection storing custom user profiles and role attributes."
+    },
+    "food_items/{itemId}": {
+      "schema": "FoodItem",
+      "description": "Collection storing the restaurant menu dishes."
+    },
+    "orders/{orderId}": {
+      "schema": "Order",
+      "description": "Collection storing user orders."
+    }
+  }
+}

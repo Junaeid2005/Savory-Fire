@@ -1,0 +1,137 @@
+rules_version = '2';
+service cloudfire.firestore {
+  match /databases/{database}/documents {
+
+    // 1. Global Safety Net - Default Deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- REUSABLE PRIMITIVES & HELPERS ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    // Role Lookup from trusted user document
+    function isAdmin() {
+      return isSignedIn() && 
+             exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // --- VALIDATION BLUEPRINTS ---
+
+    function isValidUser(data) {
+      return data.email is string && 
+             data.email.size() > 0 && 
+             data.email.size() <= 200 && 
+             data.isAdmin is bool &&
+             data.createdAt == request.time;
+    }
+
+    function isValidFoodItem(data) {
+      return data.name is string && 
+             data.name.size() > 0 && 
+             data.name.size() <= 200 && 
+             data.price is number && 
+             data.price >= 0 && 
+             data.imageUrl is string && 
+             data.imageUrl.size() <= 1000 && 
+             data.description is string && 
+             data.description.size() <= 2000 && 
+             data.category is string && 
+             data.category.size() <= 100 && 
+             data.isAvailable is bool;
+    }
+
+    function isValidOrder(data) {
+      return data.userId is string && 
+             data.userId.size() > 0 && 
+             data.userId.size() <= 128 && 
+             data.userEmail is string && 
+             data.userEmail.size() > 0 && 
+             data.userEmail.size() <= 200 && 
+             data.totalPrice is number && 
+             data.totalPrice >= 0 && 
+             data.referenceNumber is string && 
+             data.referenceNumber.matches('^[0-9]{4}$') && 
+             data.paymentStatus in ['pending', 'paid'] && 
+             data.items is list && 
+             data.items.size() > 0 && 
+             data.items.size() <= 100 &&
+             data.createdAt == request.time;
+    }
+
+    // --- COLLECTION MATCH BLOCKS ---
+
+    // USERS COLLECTION
+    match /users/{userId} {
+      allow get: if isSignedIn() && (isOwner(userId) || isAdmin());
+      
+      // Let standard users sign up their own profile, but force isAdmin to be false initially
+      allow create: if isSignedIn() && 
+                    isOwner(userId) && 
+                    incoming().isAdmin == false && 
+                    isValidUser(incoming()) && 
+                    isValidId(userId);
+
+      // Users can update their profile (but cannot escalate isAdmin), or Admin can update anything
+      allow update: if (isSignedIn() && isOwner(userId) && 
+                     incoming().isAdmin == existing().isAdmin && 
+                     isValidUser(incoming()) && 
+                     incoming().email == existing().email) || isAdmin();
+                     
+      allow delete: if isAdmin();
+    }
+
+    // FOOD ITEMS COLLECTION (MENU)
+    match /food_items/{itemId} {
+      // Menu items can be read by anyone (including unauthenticated guests)
+      allow read: if true;
+      
+      // Only admins can modify the menu items
+      allow create: if isAdmin() && isValidFoodItem(incoming()) && isValidId(itemId);
+      allow update: if isAdmin() && isValidFoodItem(incoming());
+      allow delete: if isAdmin();
+    }
+
+    // ORDERS COLLECTION
+    match /orders/{orderId} {
+      // Users can retrieve their own orders, Admins can view all orders
+      allow get: if isSignedIn() && (existing().userId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+
+      // Create: Users can place orders for themselves under their own UID. New orders MUST be pending.
+      allow create: if isSignedIn() && 
+                    incoming().userId == request.auth.uid && 
+                    incoming().paymentStatus == 'pending' && 
+                    isValidOrder(incoming()) && 
+                    isValidId(orderId);
+
+      // Update: Customers cannot modify orders. Admins can mark orders as paid.
+      allow update: if isAdmin() && 
+                    isValidOrder(incoming()) && 
+                    (incoming().paymentStatus == 'paid' && existing().paymentStatus == 'pending') && 
+                    incoming().diff(existing()).affectedKeys().hasOnly(['paymentStatus']);
+
+      // Only admins can delete orders
+      allow delete: if isAdmin();
+    }
+  }
+}
