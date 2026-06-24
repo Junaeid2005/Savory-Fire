@@ -57,6 +57,7 @@ export default function AdminDashboard({ adminEmail }: AdminDashboardProps) {
     amount: number;
     subject: string;
     body: string;
+    previewUrl?: string;
   } | null>(null);
 
   // Form State for Adding/Editing Menu Items
@@ -148,9 +149,29 @@ export default function AdminDashboard({ adminEmail }: AdminDashboardProps) {
         paymentStatus: "paid",
       });
 
-      // Simulate sending a "Payment received" email
       const emailSubject = `[Savory Green] Payment Verified - Order Ref: ${order.referenceNumber}`;
       const emailBody = `Hi ${order.userEmail.split("@")[0]},\n\nWe are delighted to inform you that your bKash payment of $${order.totalPrice.toFixed(2)} with Reference Code "${order.referenceNumber}" has been verified successfully!\n\nOur kitchen staff is already preparing your fresh organic dishes. You can track your order status live on your Savory Green dashboard.\n\nThank you for choosing Savory Green!\n\nWarm regards,\nSavory Green Culinary Team\nHotline: 01721938899`;
+
+      let previewUrl = "";
+      try {
+        const response = await fetch("/api/send-email", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            to: order.userEmail,
+            subject: emailSubject,
+            body: emailBody,
+          }),
+        });
+        const data = await response.json();
+        if (data.success && data.previewUrl) {
+          previewUrl = data.previewUrl;
+        }
+      } catch (emailErr) {
+        console.error("Real email dispatch failed, falling back to modal logging:", emailErr);
+      }
 
       setEmailModal({
         show: true,
@@ -159,6 +180,7 @@ export default function AdminDashboard({ adminEmail }: AdminDashboardProps) {
         amount: order.totalPrice,
         subject: emailSubject,
         body: emailBody,
+        previewUrl,
       });
 
     } catch (err: any) {
@@ -409,6 +431,11 @@ export default function AdminDashboard({ adminEmail }: AdminDashboardProps) {
                         <p className="text-sm font-semibold text-gray-800 mt-1.5">
                           Customer: <span className="font-mono font-medium text-emerald-950">{order.userEmail}</span>
                         </p>
+                        {order.address && (
+                          <p className="text-xs font-normal text-gray-600 mt-1 bg-emerald-50/50 p-2 rounded-lg border border-emerald-100/30 max-w-xl">
+                            <span className="font-semibold text-emerald-800">Deliver To:</span> {order.address}
+                          </p>
+                        )}
                       </div>
 
                       <div className="text-right">
@@ -705,6 +732,23 @@ export default function AdminDashboard({ adminEmail }: AdminDashboardProps) {
                   {emailModal.body}
                 </div>
               </div>
+
+              {emailModal.previewUrl && (
+                <div className="bg-amber-50 border border-amber-200 text-amber-900 p-4 rounded-xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 font-sans">
+                  <div>
+                    <span className="font-bold text-xs block mb-0.5">Real Ethereal Email Transmitted!</span>
+                    <p className="text-[11px] text-amber-800">You can open and view the real formatted email live in your browser.</p>
+                  </div>
+                  <a
+                    href={emailModal.previewUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs px-4 py-2 rounded-lg transition-all shadow-md inline-block shrink-0"
+                  >
+                    Open Email Preview
+                  </a>
+                </div>
+              )}
 
               <div className="flex items-center justify-between bg-emerald-50 p-3.5 rounded-xl border border-emerald-100 text-emerald-900">
                 <div className="flex items-center space-x-2">
