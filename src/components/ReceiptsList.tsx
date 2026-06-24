@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Clock, CheckCircle2, AlertCircle, ShoppingBag, Landmark, ChevronDown, ChevronUp, FileText } from "lucide-react";
+import { Clock, CheckCircle2, AlertCircle, ShoppingBag, Landmark, ChevronDown, ChevronUp, FileText, MapPin } from "lucide-react";
 import { Order } from "../types";
 import { collection, query, where, orderBy, onSnapshot } from "firebase/firestore";
 import { db, handleFirestoreError, OperationType } from "../firebase";
@@ -23,8 +23,7 @@ export default function ReceiptsList({ userId }: ReceiptsListProps) {
       // Real-time Firestore sync of the customer's orders
       const q = query(
         collection(db, path),
-        where("userId", "==", userId),
-        orderBy("createdAt", "desc")
+        where("userId", "==", userId)
       );
 
       const unsubscribe = onSnapshot(
@@ -34,6 +33,13 @@ export default function ReceiptsList({ userId }: ReceiptsListProps) {
             id: doc.id,
             ...doc.data(),
           })) as Order[];
+          
+          // Sort dynamically in-memory to bypass composite index requirements
+          fetchedOrders.sort((a, b) => {
+            const dateA = a.createdAt?.toDate ? a.createdAt.toDate() : new Date(a.createdAt || 0);
+            const dateB = b.createdAt?.toDate ? b.createdAt.toDate() : new Date(b.createdAt || 0);
+            return dateB.getTime() - dateA.getTime();
+          });
           
           setOrders(fetchedOrders);
           setLoading(false);
@@ -181,6 +187,16 @@ export default function ReceiptsList({ userId }: ReceiptsListProps) {
                       </span>
                     </div>
                   </div>
+
+                  {order.address && (
+                    <div className="bg-white border border-emerald-100 rounded-lg p-3.5 flex gap-2.5 text-[11px] leading-relaxed text-gray-600">
+                      <MapPin className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                      <div>
+                        <span className="font-bold text-gray-800 block mb-0.5">Delivery Address:</span>
+                        <span className="text-gray-700">{order.address}</span>
+                      </div>
+                    </div>
+                  )}
 
                   {/* List of itemized items */}
                   <div>
