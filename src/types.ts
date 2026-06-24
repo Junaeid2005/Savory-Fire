@@ -31,5 +31,6 @@ export interface Order {
   totalPrice: number;
   referenceNumber: string;
   paymentStatus: "pending" | "paid";
+  address?: string;
   createdAt: any;
 }
