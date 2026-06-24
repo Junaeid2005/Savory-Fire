@@ -28,6 +28,8 @@ import { auth, db, handleFirestoreError, OperationType } from "./firebase";
 import { FoodItem, UserProfile } from "./types";
 import { DEFAULT_FOOD_ITEMS } from "./defaultItems";
 
+import { motion, AnimatePresence } from "motion/react";
+
 // Component imports
 import Navbar from "./components/Navbar";
 import AuthScreen from "./components/AuthScreen";
@@ -36,6 +38,7 @@ import CartSidebar from "./components/CartSidebar";
 import PaymentModal from "./components/PaymentModal";
 import ReceiptsList from "./components/ReceiptsList";
 import AdminDashboard from "./components/AdminDashboard";
+import ReviewsPortal from "./components/ReviewsPortal";
 
 export default function App() {
   // Authentication & Profile States
@@ -44,7 +47,7 @@ export default function App() {
   const [loadingAuth, setLoadingAuth] = useState(true);
 
   // App Layout States
-  const [activeTab, setActiveTab] = useState<"menu" | "orders" | "admin">("menu");
+  const [activeTab, setActiveTab] = useState<"menu" | "reviews" | "orders" | "admin">("menu");
   const [activeCategory, setActiveCategory] = useState<string>("All");
   const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
@@ -54,21 +57,16 @@ export default function App() {
   const [loadingMenu, setLoadingMenu] = useState(true);
   const [cart, setCart] = useState<{ [itemId: string]: { item: FoodItem; quantity: number } }>({});
 
-  // Real-time Database connection test
+  // Light-weight connection tracking
   useEffect(() => {
-    async function testConnection() {
-      const path = 'test/connection';
-      try {
-        const testRef = doc(db, 'test', 'connection');
-        await getDoc(testRef);
-        console.log("Firebase Connection Verified Successfully.");
-      } catch (error) {
-        if(error instanceof Error && error.message.includes('the client is offline')) {
-          console.error("Please check your Firebase configuration.");
-        }
-      }
-    }
-    testConnection();
+    const handleOnline = () => console.log("Network back online.");
+    const handleOffline = () => console.warn("App running in offline mode.");
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
   }, []);
 
   // Monitor Authentication and Sync Roles
@@ -244,8 +242,13 @@ export default function App() {
   // List of categories derived dynamically
   const categories = ["All", "Mains", "Salads", "Desserts", "Drinks"];
 
+  // Resolve display items: fallback to static DEFAULT_FOOD_ITEMS if db is empty or offline
+  const displayItems = menuItems.length > 0 
+    ? menuItems 
+    : DEFAULT_FOOD_ITEMS.map((item, idx) => ({ id: `default-${idx}`, ...item }));
+
   // Filter food items matching active category
-  const filteredItems = menuItems.filter((item) => {
+  const filteredItems = displayItems.filter((item) => {
     if (activeCategory === "All") return true;
     return item.category.toLowerCase() === activeCategory.toLowerCase();
   });
@@ -275,124 +278,152 @@ export default function App() {
       />
 
       {/* Main Content Area */}
-      <main className="flex-grow">
-        {activeTab === "menu" && (
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8" id="menu-view-layout">
-            
-            {/* Immersive Brand Banner */}
-            <div className="bg-emerald-950/80 backdrop-blur-xl text-white rounded-3xl p-8 sm:p-12 mb-10 relative overflow-hidden border border-white/20 shadow-xl">
-              <div className="absolute right-0 top-0 bottom-0 opacity-15 pointer-events-none hidden lg:block w-1/2">
-                <img 
-                  src="https://images.unsplash.com/photo-1543362906-acfc16c67564?auto=format&fit=crop&q=80&w=600" 
-                  alt="Background decoration" 
-                  className="w-full h-full object-cover"
-                />
-              </div>
-              <div className="max-w-2xl relative z-10 space-y-4">
-                <div className="inline-flex items-center space-x-1.5 bg-emerald-700/50 px-3 py-1 rounded-full text-[10px] font-sans font-bold tracking-widest uppercase border border-emerald-600/30">
-                  <Sparkles className="w-3.5 h-3.5 text-amber-300 animate-pulse" />
-                  <span>Wholesome Organic Dining</span>
-                </div>
-                <h2 className="text-3xl sm:text-5xl font-sans font-black tracking-tight leading-none text-emerald-50">
-                  Savor the Goodness <br />
-                  <span className="text-emerald-400">Of Pure Nature</span>
-                </h2>
-                <p className="text-sm text-emerald-200 leading-relaxed font-light">
-                  Premium ingredients curated by master culinary artists. Fresh, vibrant salads, plant-based powerhouses, delicious matcha-themed treats, and raw cold-pressed juices. Complete your payment via secure <strong>bKash reference numbers</strong> for prioritized kitchen prep!
-                </p>
-                <div className="pt-2 flex flex-wrap gap-3">
-                  <button 
-                    onClick={() => {
-                      const el = document.getElementById("menu-grid-section");
-                      el?.scrollIntoView({ behavior: "smooth" });
-                    }}
-                    className="bg-emerald-500 hover:bg-emerald-600 text-emerald-950 font-bold text-xs px-6 py-3 rounded-xl transition-all shadow-md flex items-center gap-1.5"
-                  >
-                    <span>Explore Menu Card</span>
-                    <ChevronRight className="w-4 h-4" />
-                  </button>
-                  <div className="flex items-center space-x-2 text-xs text-emerald-300/90 font-mono bg-emerald-900/40 px-3.5 py-2 rounded-xl border border-emerald-800">
-                    <Activity className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>bKash Hotline: 01721938899</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Category Filter and Dishes Area */}
-            <div className="grid grid-cols-1 lg:grid-cols-4 gap-8" id="menu-grid-section">
-              
-              {/* Left Side: Category filter and grid of food */}
-              <div className="lg:col-span-3 space-y-6">
+      <main className="flex-grow overflow-hidden">
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={activeTab}
+            initial={{ opacity: 0, y: 15 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -15 }}
+            transition={{ duration: 0.22, ease: "easeInOut" }}
+          >
+            {activeTab === "menu" && (
+              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8" id="menu-view-layout">
                 
-                {/* Category filters */}
-                <div className="flex items-center space-x-2.5 overflow-x-auto pb-2 scrollbar-none">
-                  {categories.map((category) => (
-                    <button
-                      key={category}
-                      onClick={() => setActiveCategory(category)}
-                      className={`px-5 py-2.5 rounded-full text-xs font-bold transition-all shrink-0 uppercase tracking-wider ${
-                        activeCategory === category
-                          ? "bg-white/80 backdrop-blur-md border border-white/50 shadow-sm text-[#2e7d32]"
-                          : "bg-white/30 hover:bg-white/60 backdrop-blur-xs transition-all border border-white/20 text-gray-600"
-                      }`}
-                    >
-                      {category}
-                    </button>
-                  ))}
+                {/* Immersive Brand Banner */}
+                <div className="bg-emerald-950/80 backdrop-blur-xl text-white rounded-3xl p-8 sm:p-12 mb-10 relative overflow-hidden border border-white/20 shadow-xl">
+                  <div className="absolute right-0 top-0 bottom-0 opacity-15 pointer-events-none hidden lg:block w-1/2">
+                    <img 
+                      src="https://images.unsplash.com/photo-1543362906-acfc16c67564?auto=format&fit=crop&q=80&w=600" 
+                      alt="Background decoration" 
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                  <div className="max-w-2xl relative z-10 space-y-4">
+                    <div className="inline-flex items-center space-x-1.5 bg-emerald-700/50 px-3 py-1 rounded-full text-[10px] font-sans font-bold tracking-widest uppercase border border-emerald-600/30">
+                      <Sparkles className="w-3.5 h-3.5 text-amber-300 animate-pulse" />
+                      <span>Wholesome Organic Dining</span>
+                    </div>
+                    <h2 className="text-3xl sm:text-5xl font-sans font-black tracking-tight leading-none text-emerald-50">
+                      Savor the Goodness <br />
+                      <span className="text-emerald-400">Of Pure Nature</span>
+                    </h2>
+                    <p className="text-sm text-emerald-200 leading-relaxed font-light">
+                      Premium ingredients curated by master culinary artists. Fresh, vibrant salads, plant-based powerhouses, delicious matcha-themed treats, and raw cold-pressed juices. Complete your payment via secure <strong>bKash reference numbers</strong> for prioritized kitchen prep!
+                    </p>
+                    <div className="pt-2 flex flex-wrap gap-3">
+                      <button 
+                        onClick={() => {
+                          const el = document.getElementById("menu-grid-section");
+                          el?.scrollIntoView({ behavior: "smooth" });
+                        }}
+                        className="bg-emerald-500 hover:bg-emerald-600 text-emerald-950 font-bold text-xs px-6 py-3 rounded-xl transition-all shadow-md flex items-center gap-1.5"
+                      >
+                        <span>Explore Menu Card</span>
+                        <ChevronRight className="w-4 h-4" />
+                      </button>
+                      <div className="flex items-center space-x-2 text-xs text-emerald-300/90 font-mono bg-emerald-900/40 px-3.5 py-2 rounded-xl border border-emerald-800">
+                        <Activity className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>bKash Hotline: 01721938899</span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
-                {/* Grid of Menu Cards */}
-                {loadingMenu ? (
-                  <div className="text-center py-20">
-                    <div className="w-12 h-12 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
-                    <p className="text-xs text-gray-400 mt-4 font-medium">Preparing our fresh organic cookbook...</p>
+                {/* Category Filter and Dishes Area */}
+                <div className="grid grid-cols-1 lg:grid-cols-4 gap-8" id="menu-grid-section">
+                  
+                  {/* Left Side: Category filter and grid of food */}
+                  <div className="lg:col-span-3 space-y-6">
+                    
+                    {/* Category filters */}
+                    <div className="flex items-center space-x-2.5 overflow-x-auto pb-2 scrollbar-none">
+                      {categories.map((category) => (
+                        <button
+                          key={category}
+                          onClick={() => setActiveCategory(category)}
+                          className={`px-5 py-2.5 rounded-full text-xs font-bold transition-all shrink-0 uppercase tracking-wider ${
+                            activeCategory === category
+                              ? "bg-white/80 backdrop-blur-md border border-white/50 shadow-sm text-[#2e7d32]"
+                              : "bg-white/30 hover:bg-white/60 backdrop-blur-xs transition-all border border-white/20 text-gray-600"
+                          }`}
+                        >
+                          {category}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Grid of Menu Cards */}
+                    {loadingMenu ? (
+                      <div className="text-center py-20">
+                        <div className="w-12 h-12 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
+                        <p className="text-xs text-gray-400 mt-4 font-medium">Preparing our fresh organic cookbook...</p>
+                      </div>
+                    ) : filteredItems.length === 0 ? (
+                      <div className="bg-white border border-emerald-100 rounded-2xl p-16 text-center shadow-xs">
+                        <p className="text-gray-400 text-sm">No items found matching the selected category.</p>
+                      </div>
+                    ) : (
+                      <AnimatePresence mode="wait">
+                        <motion.div
+                          key={activeCategory}
+                          initial={{ opacity: 0, y: 15 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: -15 }}
+                          transition={{ duration: 0.2 }}
+                          className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6"
+                        >
+                          {filteredItems.map((item) => (
+                            <MenuCard
+                              key={item.id}
+                              item={item}
+                              quantity={cart[item.id]?.quantity || 0}
+                              onIncrease={() => handleIncreaseCart(item.id)}
+                              onDecrease={() => handleDecreaseCart(item.id)}
+                              onAddToCart={() => handleIncreaseCart(item.id)}
+                            />
+                          ))}
+                        </motion.div>
+                      </AnimatePresence>
+                    )}
                   </div>
-                ) : filteredItems.length === 0 ? (
-                  <div className="bg-white border border-emerald-100 rounded-2xl p-16 text-center shadow-xs">
-                    <p className="text-gray-400 text-sm">No items found matching the selected category.</p>
+
+                  {/* Right Side: Sticky Shopping Cart drawer */}
+                  <div className="lg:col-span-1">
+                    <CartSidebar
+                      cartItems={cartItemsArray}
+                      onIncrease={handleIncreaseCart}
+                      onDecrease={handleDecreaseCart}
+                      onClear={handleClearCart}
+                      onCheckout={() => setIsCheckoutOpen(true)}
+                      isSignedIn={!!user}
+                      onOpenAuth={handleOpenAuth}
+                    />
                   </div>
-                ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6">
-                    {filteredItems.map((item) => (
-                      <MenuCard
-                        key={item.id}
-                        item={item}
-                        quantity={cart[item.id]?.quantity || 0}
-                        onIncrease={() => handleIncreaseCart(item.id)}
-                        onDecrease={() => handleDecreaseCart(item.id)}
-                        onAddToCart={() => handleIncreaseCart(item.id)}
-                      />
-                    ))}
-                  </div>
-                )}
+
+                </div>
+
               </div>
+            )}
 
-              {/* Right Side: Sticky Shopping Cart drawer */}
-              <div className="lg:col-span-1">
-                <CartSidebar
-                  cartItems={cartItemsArray}
-                  onIncrease={handleIncreaseCart}
-                  onDecrease={handleDecreaseCart}
-                  onClear={handleClearCart}
-                  onCheckout={() => setIsCheckoutOpen(true)}
-                  isSignedIn={!!user}
-                  onOpenAuth={handleOpenAuth}
-                />
-              </div>
+            {activeTab === "reviews" && (
+              <ReviewsPortal
+                userId={user ? user.uid : null}
+                userEmail={user ? user.email : null}
+                isAdmin={isAdmin}
+                onOpenAuth={handleOpenAuth}
+              />
+            )}
 
-            </div>
+            {activeTab === "orders" && user && (
+              <ReceiptsList userId={user.uid} />
+            )}
 
-          </div>
-        )}
-
-        {activeTab === "orders" && user && (
-          <ReceiptsList userId={user.uid} />
-        )}
-
-        {activeTab === "admin" && user && isAdmin && (
-          <AdminDashboard adminEmail={user.email || ""} />
-        )}
+            {activeTab === "admin" && user && isAdmin && (
+              <AdminDashboard adminEmail={user.email || ""} />
+            )}
+          </motion.div>
+        </AnimatePresence>
       </main>
 
       {/* Footer */}
