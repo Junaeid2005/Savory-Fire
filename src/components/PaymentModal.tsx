@@ -29,6 +29,8 @@ export default function PaymentModal({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [receipt, setReceipt] = useState<any | null>(null);
+  const [address, setAddress] = useState("");
+  const [addressError, setAddressError] = useState(false);
 
   const bkashNumber = "01721938899";
   const totalPrice = cartItems.reduce((sum, ci) => sum + ci.item.price * ci.quantity, 0);
@@ -46,6 +48,12 @@ export default function PaymentModal({
   };
 
   const handleConfirmOrder = async () => {
+    if (!address.trim()) {
+      setAddressError(true);
+      setError("Delivery address is required to place your order.");
+      return;
+    }
+    setAddressError(false);
     setLoading(true);
     setError(null);
 
@@ -67,6 +75,7 @@ export default function PaymentModal({
         totalPrice,
         referenceNumber,
         paymentStatus: "pending" as const,
+        address: address.trim(),
         createdAt: serverTimestamp(), // Rules strictly enforce request.time
       };
 
@@ -208,6 +217,29 @@ export default function PaymentModal({
 
               </div>
 
+              {/* Delivery Address Field */}
+              <div className="bg-white/50 backdrop-blur-xs border border-emerald-100 p-5 rounded-2xl space-y-2 text-left">
+                <label className="block text-xs font-bold uppercase tracking-wider text-emerald-800">
+                  Delivery Address <span className="text-red-500">*</span>
+                </label>
+                <p className="text-[10px] text-gray-500">Please provide your precise physical address so our couriers can find you.</p>
+                <textarea
+                  required
+                  rows={2}
+                  value={address}
+                  onChange={(e) => {
+                    setAddress(e.target.value);
+                    if (e.target.value.trim()) setAddressError(false);
+                  }}
+                  placeholder="e.g. House 14, Road 5, Sector 3, Uttara, Dhaka, Bangladesh"
+                  className={`w-full p-3 border rounded-xl focus:outline-none focus:ring-2 text-xs transition-all ${
+                    addressError 
+                      ? "border-red-400 focus:ring-red-500/20" 
+                      : "border-emerald-100 focus:border-emerald-500 focus:ring-emerald-500/20"
+                  }`}
+                />
+              </div>
+
               {/* Confirmation Action */}
               <div className="pt-4 border-t border-emerald-50 text-center">
                 <p className="text-[10px] text-gray-400 mb-3">
@@ -264,6 +296,11 @@ export default function PaymentModal({
                   <span className="bg-amber-100 text-amber-800 text-[10px] font-sans font-black px-2 py-0.5 rounded-full uppercase tracking-wider">
                     {receipt.paymentStatus}
                   </span>
+                </div>
+
+                <div className="flex flex-col text-xs pb-2 border-b border-emerald-50">
+                  <span className="font-semibold text-gray-500 mb-1">Delivery Address</span>
+                  <span className="text-gray-800 bg-gray-50 p-2.5 rounded-lg leading-relaxed text-[11px]">{receipt.address}</span>
                 </div>
                 
                 {/* List item details in receipt */}
